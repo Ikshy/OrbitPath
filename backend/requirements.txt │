@@ -1,0 +1,19 @@
+# Web framework & CORS
+flask==3.0.3
+flask-cors==4.0.1
+
+# Orbital mechanics
+sgp4==2.23
+
+# Scientific computing
+numpy==1.26.4
+scipy==1.13.1
+
+# Machine learning (anomaly detection)
+scikit-learn==1.5.1
+
+# HTTP requests (TLE fetching)
+requests==2.32.3
+
+# Production WSGI server (optional, for deployment)
+gunicorn==22.0.0

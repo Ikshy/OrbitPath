@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OrbitPath — Space Situational Awareness</title>
+  <meta name="description" content="Real-time satellite tracking, collision prediction, and AI anomaly detection." />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- Three.js r128 — stable, widely supported -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ BOOT SCREEN -->
+<div id="boot">
+  <div class="boot-logo-wrap">
+    <div class="boot-logo">ORBIT<em>PATH</em></div>
+    <div class="boot-underline"></div>
+  </div>
+  <div class="boot-sub">Space Situational Awareness System · v3.0</div>
+  <div class="boot-progress">
+    <div class="boot-bar-track"><div class="boot-bar-fill"></div></div>
+  </div>
+  <div class="boot-log">
+    <div class="boot-log-line">Initialising SGP4 orbital propagation engine...</div>
+    <div class="boot-log-line">Loading NASA Blue Marble Earth texture...</div>
+    <div class="boot-log-line">Connecting to CelesTrak TLE catalogue...</div>
+    <div class="boot-log-line">Calibrating Isolation Forest anomaly model...</div>
+    <div class="boot-log-line">All systems nominal. Launching dashboard.</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════ APP -->
+<div id="app">
+
+  <!-- ════════════════════════════════════════════════ HEADER -->
+  <header id="header">
+
+    <div class="brand">
+      <div class="brand-orbit-icon">
+        <div class="orbit-ring"></div>
+        <div class="orbit-ring"></div>
+        <div class="orbit-ring"></div>
+        <div class="orbit-center"></div>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">ORBIT<strong>PATH</strong></div>
+        <div class="brand-tagline">Space Situational Awareness · Real-Time Intelligence</div>
+      </div>
+    </div>
+
+    <div class="hdr-metrics">
+      <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+      <div class="vsep"></div>
+      <div class="metric-chip">
+        <div class="mc-label">Tracking</div>
+        <div class="mc-value cyan"  id="mc-sats">—</div>
+      </div>
+      <div class="metric-chip">
+        <div class="mc-label">Conjunctions</div>
+        <div class="mc-value amber" id="mc-coll">—</div>
+      </div>
+      <div class="metric-chip">
+        <div class="mc-label">Anomalies</div>
+        <div class="mc-value amber" id="mc-anom">—</div>
+      </div>
+      <div class="metric-chip">
+        <div class="mc-label">API Status</div>
+        <div class="mc-value green" id="mc-api">OK</div>
+      </div>
+    </div>
+
+    <div class="hdr-clock">
+      <span class="clock-lbl">UTC Mission Time</span>
+      <span class="clock-time" id="clock">——:——:——</span>
+    </div>
+
+  </header>
+
+
+  <!-- ════════════════════════════════════════ LEFT SIDEBAR -->
+  <aside id="sidebar-l" class="sidebar">
+
+    <!-- Mission Controls -->
+    <div class="panel">
+      <div class="panel-hdr" onclick="UI.toggle(this)">
+        <span class="panel-icon">⊕</span>
+        <span class="panel-title">Mission Controls</span>
+      </div>
+      <div class="panel-body open">
+        <div class="ctrl-pad">
+          <div class="ctrl-lbl">Catalogue Group</div>
+          <select class="sel" id="grp-sel">
+            <option value="stations">Space Stations</option>
+            <option value="active">Active Satellites</option>
+            <option value="starlink">Starlink Constellation</option>
+            <option value="debris">Orbital Debris</option>
+          </select>
+          <div class="ctrl-row">
+            <button class="btn on full" id="btn-orbits">⬡ Orbits</button>
+            <button class="btn on full" id="btn-conj">⇄ Conjunctions</button>
+          </div>
+          <div class="ctrl-row">
+            <button class="btn on full" id="btn-trails">◎ Trails</button>
+            <button class="btn on full" id="btn-labels">Ⓐ Labels</button>
+          </div>
+          <button class="btn full" id="btn-refresh" style="width:100%; margin-top:2px;">↻ Refresh All</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Animated Radar -->
+    <div class="radar-wrap">
+      <div class="radar-disc">
+        <div class="r-ring-d"></div><div class="r-ring-d"></div>
+        <div class="r-ring-d"></div><div class="r-ring-d"></div>
+        <div class="r-ring-d"></div>
+        <div class="radar-cross-h"></div>
+        <div class="radar-cross-v"></div>
+        <div class="radar-sweep"></div>
+        <!-- blips injected by JS -->
+      </div>
+      <span class="radar-label">Active Tracking Radar</span>
+    </div>
+
+    <!-- Tracked Objects -->
+    <div class="panel" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+      <div class="panel-hdr" onclick="UI.toggle(this)">
+        <span class="panel-icon">◈</span>
+        <span class="panel-title">Tracked Objects</span>
+        <span class="p-badge cyan" id="badge-sats">—</span>
+      </div>
+      <div class="panel-body open" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+        <div id="sat-loading" class="loading" style="display:none;">FETCHING TLE DATA...</div>
+        <div class="sat-scroll" id="sat-list">
+          <div class="loading">INITIALISING...</div>
+        </div>
+        <div class="legend-row">
+          <div class="leg-item"><div class="leg-dot" style="background:var(--sat-station);color:var(--sat-station);"></div>Stations</div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--sat-active);color:var(--sat-active);"></div>Active</div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--sat-starlink);color:var(--sat-starlink);"></div>Starlink</div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--sat-debris);color:var(--sat-debris);"></div>Debris</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selected Object -->
+    <div class="panel" id="sel-panel" style="display:none;">
+      <div class="panel-hdr" onclick="UI.toggle(this)">
+        <span class="panel-icon">◎</span>
+        <span class="panel-title">Selected Object</span>
+      </div>
+      <div class="panel-body open">
+        <div class="data-grid" id="sel-body"></div>
+        <div style="padding:0 13px 10px;">
+          <button class="btn full" id="btn-orbit-track" style="width:100%;">↻ Load Orbit Track</button>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+
+  <!-- ═══════════════════════════════════════════════ GLOBE -->
+  <main id="globe-wrap">
+    <canvas id="globe-canvas"></canvas>
+
+    <!-- Corner brackets -->
+    <div class="brk" id="brk-tl"></div>
+    <div class="brk" id="brk-tr"></div>
+    <div class="brk" id="brk-bl"></div>
+    <div class="brk" id="brk-br"></div>
+
+    <!-- HUD overlays -->
+    <div class="hud" id="hud-tl">
+      <div><span>MODE</span> SSA-PASSIVE</div>
+      <div><span>FRAME</span> ECI J2000</div>
+      <div><span>PROP</span> SGP4/SDP4</div>
+      <div><span>EPOCH</span> REAL-TIME</div>
+    </div>
+    <div class="hud" id="hud-tr">
+      <div><span>OBJECTS</span> <span id="hud-count">—</span></div>
+      <div><span>SOURCE</span> CELESTRAK</div>
+      <div><span>UPDATE</span> 8 SEC</div>
+      <div><span>COORD</span> WGS-84</div>
+    </div>
+    <div class="hud" id="hud-bl">
+      <div>▸ SCROLL → ZOOM</div>
+      <div>▸ DRAG   → ROTATE</div>
+      <div>▸ CLICK  → SELECT</div>
+    </div>
+    <div class="hud" id="hud-br">
+      <div><span>RISK Δ</span> 50 KM</div>
+      <div><span>MODEL</span> ISO. FOREST</div>
+      <div><span>FEATS</span> 6 PARAMS</div>
+    </div>
+  </main>
+
+
+  <!-- ══════════════════════════════════════ RIGHT SIDEBAR -->
+  <aside id="sidebar-r" class="sidebar">
+
+    <!-- Collision Risk -->
+    <div class="panel">
+      <div class="panel-hdr" onclick="UI.toggle(this)">
+        <span class="panel-icon">⚠</span>
+        <span class="panel-title">Collision Risk</span>
+        <span class="p-badge red" id="badge-coll">—</span>
+      </div>
+      <div class="panel-body open">
+        <div class="risk-grid">
+          <div class="r-card crit"><div class="r-num" id="rc-crit">—</div><div class="r-lbl">Critical</div></div>
+          <div class="r-card high"><div class="r-num" id="rc-high">—</div><div class="r-lbl">High</div></div>
+          <div class="r-card med"> <div class="r-num" id="rc-med">—</div> <div class="r-lbl">Medium</div></div>
+          <div class="r-card low"> <div class="r-num" id="rc-low">—</div> <div class="r-lbl">Low</div></div>
+        </div>
+        <div class="sep"></div>
+        <div class="sec-lbl">Conjunction Events</div>
+        <div class="ev-scroll" id="ev-list"><div class="loading">ANALYSING...</div></div>
+        <div style="padding:4px 10px 10px;">
+          <button class="btn full" id="btn-refresh-coll" style="width:100%;">↻ Refresh Analysis</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Anomaly Detection -->
+    <div class="panel">
+      <div class="panel-hdr" onclick="UI.toggle(this)">
+        <span class="panel-icon">◬</span>
+        <span class="panel-title">AI Anomaly Detection</span>
+        <span class="p-badge amber" id="badge-anom">—</span>
+      </div>
+      <div class="panel-body open">
+        <div class="data-grid">
+          <div class="d-row"><span class="d-key">Algorithm</span><span class="d-val c">Isolation Forest</span></div>
+          <div class="d-row"><span class="d-key">Features</span><span class="d-val">6 orbital params</span></div>
+          <div class="d-row"><span class="d-key">Contamination</span><span class="d-val">5 %</span></div>
+          <div class="d-row"><span class="d-key">Trees</span><span class="d-val">200 estimators</span></div>
+        </div>
+        <div class="sep"></div>
+        <div class="sec-lbl">Flagged Objects</div>
+        <div class="an-scroll" id="an-list"><div class="loading">RUNNING MODEL...</div></div>
+        <div style="padding:4px 10px 10px; display:flex; gap:6px;">
+          <button class="btn full" id="btn-refresh-anom">↻ Refresh</button>
+          <button class="btn danger full" id="btn-retrain">⟳ Retrain</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Orbital Regime -->
+    <div class="panel">
+      <div class="panel-hdr" onclick="UI.toggle(this)">
+        <span class="panel-icon">◉</span>
+        <span class="panel-title">Orbital Regime</span>
+      </div>
+      <div class="panel-body open">
+        <div class="regime-pad">
+          <div class="regime-row">
+            <div class="regime-top"><span class="regime-name">LEO &lt; 2 000 km</span><span class="regime-pct">~85%</span></div>
+            <div class="regime-track"><div class="regime-fill" style="width:85%;background:linear-gradient(90deg,#0077ff,#00d4ff);"></div></div>
+          </div>
+          <div class="regime-row">
+            <div class="regime-top"><span class="regime-name">MEO 2 000–35 000</span><span class="regime-pct">~5%</span></div>
+            <div class="regime-track"><div class="regime-fill" style="width:5%;background:linear-gradient(90deg,#ff8800,#ffaa00);"></div></div>
+          </div>
+          <div class="regime-row">
+            <div class="regime-top"><span class="regime-name">GEO ≈ 35 786 km</span><span class="regime-pct">~10%</span></div>
+            <div class="regime-track"><div class="regime-fill" style="width:10%;background:linear-gradient(90deg,#00aa55,#00ff88);"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- API Reference -->
+    <div class="panel">
+      <div class="panel-hdr" onclick="UI.toggle(this)">
+        <span class="panel-icon">⌁</span>
+        <span class="panel-title">REST API Endpoints</span>
+      </div>
+      <div class="panel-body open">
+        <div class="api-list">
+          <div class="api-row"><span class="api-method">GET</span><span class="api-path">/satellites</span></div>
+          <div class="api-row"><span class="api-method">GET</span><span class="api-path">/orbits/:norad_id</span></div>
+          <div class="api-row"><span class="api-method">GET</span><span class="api-path">/collision-risk</span></div>
+          <div class="api-row"><span class="api-method">GET</span><span class="api-path">/anomaly-report</span></div>
+          <div class="api-row"><span class="api-method">GET</span><span class="api-path">/health</span></div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+</div><!-- /#app -->
+
+
+<!-- Hover tooltip -->
+<div id="tooltip">
+  <div class="tt-name" id="tt-name">—</div>
+  <div class="data-grid" id="tt-body"></div>
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>
